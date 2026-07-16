@@ -1,37 +1,47 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using TMPro;
 
 namespace InventoryDemo.UI
 {
     public sealed class InventoryWindowView : MonoBehaviour
     {
-        private GameObject inventoryWindow;
-        private RectTransform contextMenu;
+        [SerializeField] private GameObject inventoryWindow;
+        [SerializeField] private RectTransform contextMenu;
+        [SerializeField] private TMP_InputField searchInputField;
+
         private RectTransform canvasRect;
         private Canvas canvas;
 
         public bool IsVisible => inventoryWindow != null && inventoryWindow.activeSelf;
 
-        public void Initialize(
-            GameObject window,
-            RectTransform menu,
-            RectTransform rootCanvasRect,
-            Canvas rootCanvas)
+        public void Configure(GameObject window, RectTransform menu)
         {
             inventoryWindow = window;
             contextMenu = menu;
-            canvasRect = rootCanvasRect;
-            canvas = rootCanvas;
+        }
+
+        private void Awake()
+        {
+            canvas = GetComponent<Canvas>();
+            canvasRect = transform as RectTransform;
 
             SetVisible(false);
         }
 
         private void Update()
         {
-            if (Keyboard.current != null && Keyboard.current.bKey.wasPressedThisFrame)
+            if (Keyboard.current == null || !Keyboard.current.bKey.wasPressedThisFrame)
             {
-                ToggleInventory();
+                return;
             }
+
+            if (searchInputField != null && searchInputField.isFocused)
+            {
+                return;
+            }
+
+            ToggleInventory();
         }
 
         public void ToggleInventory()
@@ -55,7 +65,7 @@ namespace InventoryDemo.UI
 
         public void ShowContextMenu(Vector2 screenPosition)
         {
-            if (!IsVisible || contextMenu == null || canvasRect == null)
+            if (!IsVisible || contextMenu == null || canvasRect == null || canvas == null)
             {
                 return;
             }
@@ -64,8 +74,10 @@ namespace InventoryDemo.UI
                 ? null
                 : canvas.worldCamera;
 
-            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                    canvasRect,
+            RectTransform menuParent = contextMenu.parent as RectTransform;
+            if (menuParent == null ||
+                !RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                    menuParent,
                     screenPosition,
                     eventCamera,
                     out Vector2 localPosition))
@@ -74,7 +86,7 @@ namespace InventoryDemo.UI
             }
 
             Vector2 menuHalfSize = contextMenu.rect.size * 0.5f;
-            Rect canvasBounds = canvasRect.rect;
+            Rect canvasBounds = menuParent.rect;
             localPosition.x = Mathf.Clamp(
                 localPosition.x,
                 canvasBounds.xMin + menuHalfSize.x,

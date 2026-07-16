@@ -158,9 +158,10 @@
 
 当前只有背包的 View/UI 基础设施，还没有物品数据、背包规则、存储或数据库架构：
 
-- `InventoryUiBootstrap`：场景加载后创建 uGUI Canvas、搜索区、6×5 格子和右键菜单，并确保存在 Input System 的 EventSystem。
-- `InventoryWindowView`：监听 B 键，维护背包窗口显示状态，并统一显示、定位和隐藏右键菜单。
-- `InventorySlotView`：接收一个格子的右键点击，将点击位置转交给窗口视图。
+- `main.unity`：保存 Canvas、`InventoryWindow`、搜索区、格子容器和 `ContextPanel` 等固定 UI；Canvas 保持激活，窗口和菜单初始隐藏。
+- `InventorySlot.prefab`：定义重复格子的 UI 外观并挂载 `InventorySlotView`；场景中的格子是该 Prefab 的实例。
+- `InventoryWindowView`：挂在 Canvas 上，监听 B 键，只切换 `InventoryWindow`，并统一定位、显示和隐藏已有的 `ContextPanel`。
+- `InventorySlotView`：接收所属格子的右键点击，从父级找到 `InventoryWindowView`，将点击位置转交给窗口视图。
 
 当前调用方向为：`B 键 -> InventoryWindowView -> 背包窗口`，以及 `格子右键 -> InventorySlotView -> InventoryWindowView -> 右键菜单`。搜索与菜单命令尚未连接任何业务行为，因此当前还不是完整 MVC 系统。
 
@@ -189,3 +190,10 @@
 - 用户给出的顺序：B 键打开表格；添加搜索区；右键格子显示三个选项；暂不实现业务功能。
 - AI 补充：把行为翻译为画面创建、窗口状态、格子右键三个职责，并使用项目已有的 uGUI 与 Input System。
 - 实际结果：新增三个 UI 脚本，完成结构编译和自动行为校验；没有提前加入数据类型、MVC Model、背包规则或数据库代码。
+
+### 变化 5：固定 UI 从代码创建改为场景与 Prefab 编辑
+
+- 触发证据：运行时代码包含全部布局细节，用户无法在 Unity 编辑器中直接调整固定窗口，后续图标、拖拽和布局修改会继续扩大 `InventoryUiBootstrap`。
+- 用户方案：在 Unity 中搭建固定背包界面；窗口保存在 `main` 场景，重复格子使用 Prefab；`InventoryWindowView` 保留输入和交互职责，Bootstrap 删除。
+- 规范化：Canvas 始终激活并承载控制器，只切换 `InventoryWindow`；右键复用场景中的 `ContextPanel`，不创建菜单或重复判断命中对象。
+- 实际结果：`InventoryUiBootstrap` 已删除，场景引用和 Slot Prefab 组件已由 Unity API 保存，`main` 成为首个启动场景。搜索和菜单命令仍没有业务行为。

@@ -89,13 +89,42 @@ AI 补充而非用户预先指定的技术细节：
 - 触发场景与后果：后续添加物品图标、数量、拖拽视觉状态或调整布局时，需要持续修改创建代码，视觉结构和交互代码会越来越难分开理解与维护。
 - 用户初步方案：固定 UI 可以直接放在场景中；如果需要运行时创建或复用，应该先制作成 Prefab，再实例化 Prefab，而不是用代码逐个创建 UI 节点。
 - AI 评审：判断正确。动态物品内容不等于固定 UI 结构也必须动态生成；场景对象适合单场景直接编辑，Prefab 适合复用和保持可视化编辑。当前项目建议把背包窗口制作成 Prefab 实例放入场景，格子可以进一步使用 Slot Prefab。
-- 用户修正方案：倾向使用 `InventoryWindow` Prefab，并将 Prefab 实例放在场景中；是否最终采用仍待用户明确确认。
-- 最终决定：待确认。
-- 对应修改与验证：尚未修改代码；确认后只重构 UI 创建方式，不同时改 InputAction 或加入物品数据。
+- 用户修正方案：固定 UI 不再由代码逐节点创建；`InventoryWindow` 直接保存在当前 `main` 场景，重复格子使用 `InventorySlot` Prefab。`InventoryWindowView` 继续检测 B 键和处理右键菜单，`InventoryUiBootstrap` 删除。
+- 最终决定：解决。
+- AI 对实现方案的修正：Canvas 必须保持激活，否则挂在其上的控制器无法继续检测 B 键；B 键只切换 `InventoryWindow`。右键事件由 `InventorySlotView` 接收，因此不再判断鼠标下是否为格子；`ContextPanel` 已存在于场景中，右键时只移动并激活它，不创建新菜单。
+- 对应修改与验证：
+  - 删除 `InventoryUiBootstrap.cs`，不再运行时创建 Canvas、窗口、格子或菜单。
+  - `InventoryWindowView` 挂在始终激活的 Canvas 上，通过序列化引用控制场景中的 `InventoryWindow` 和 `ContextPanel`。
+  - `InventorySlotView` 加入 `InventorySlot.prefab`，激活时从父级查找 Canvas 上的 `InventoryWindowView`。
+  - `InventoryWindow` 与 `ContextPanel` 在场景中初始隐藏；`main.unity` 已设为 Build Settings 的首个场景。
+  - Unity 序列化引用检查与最终脚本编译通过，没有 C# 编译错误。
+  - 临时 Play Mode 验证器未产生可靠结果标记并已删除；之后用户在实际操作基础上接受当前 UI 行为并要求继续流程。
+  - 用户补充了“左键点击格子时隐藏菜单”：`InventorySlotView.OnPointerClick()` 识别左键后调用 `InventoryWindowView.HideContextMenu()`。
+  - 当前接受的边界是“左键点击格子隐藏”，不是“点击菜单外任意区域隐藏”；用户决定暂时保持这一范围。
+
+### 完成后痛点 2：B 键开关与搜索框输入可能冲突
+
+- 分类：`current-flow-regression`
+- 观察依据：`InventoryWindowView.Update()` 在窗口打开期间仍全局监听 `Keyboard.current.bKey.wasPressedThisFrame`；当前窗口已经包含可获得键盘焦点的搜索输入框。
+- 触发场景与后果：玩家点击搜索框并尝试输入包含字母 B 的搜索词时，同一次按键可能关闭整个背包，导致文本输入被窗口快捷键打断。
+- 用户提出的方案：在 B 键判断外增加一层条件；当搜索输入框正在输入时，不进入 `ToggleInventory()`，离开输入状态后恢复 B 键切换。
+- AI 评审：方向正确。TMP 输入框通过 `TMP_InputField.isFocused` 暴露当前是否拥有输入焦点；`InventoryWindowView` 可以序列化引用场景中的搜索输入框，并把 `!searchInputField.isFocused` 作为执行 B 键快捷操作的条件。
+- 规范化边界：只屏蔽“搜索框拥有焦点”期间的 B 键快捷操作，不禁用输入框，也不改变右键菜单和其他背包行为；输入框失去焦点后自动恢复，无需额外维护一个容易失真的布尔状态。
+- 对应修改：`InventoryWindowView` 新增序列化的 `TMP_InputField` 引用；`Update()` 先检查 B 键，再检查 `searchInputField.isFocused`，只有输入框未获得焦点时才调用 `ToggleInventory()`；`main.unity` 已绑定现有的 `InputField (TMP)`。
+- 自动验证：`Assembly-CSharp.csproj` 编译成功，0 个警告、0 个错误；场景序列化字段指向 TMP 输入框组件。
+- 运行时验证：用户在 Game 视图确认两种行为均通过：搜索框有焦点时输入包含 B 的文本不会关闭背包；搜索框失去焦点后，B 键恢复开关背包。
+- 最终决定：解决。
 
 ### 理解状态
 
-`not-started`
+`in-progress`
+
+### 流程 1.1 痛点审查结论
+
+- 必须处理的痛点 1：固定 UI 完全由运行时代码创建，已改为 Scene 与 Slot Prefab 并解决。
+- 必须处理的痛点 2：B 键与搜索输入焦点冲突，已使用 `TMP_InputField.isFocused` 解决并通过 Game 视图验证。
+- 可选项：点击菜单外任意区域时关闭菜单；当前只支持左键点击格子关闭，用户明确决定暂缓。
+- 当前结论：流程 1.1 没有其他有证据支持的必修痛点，进入理解检查。
 
 ## 全局学习方法风险记录
 

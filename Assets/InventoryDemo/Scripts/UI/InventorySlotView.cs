@@ -7,16 +7,20 @@ namespace InventoryDemo.UI
     {
         private InventoryWindowView windowView;
 
-        public void Initialize(InventoryWindowView owner)
+        private void Awake()
         {
-            windowView = owner;
+            windowView = GetComponentInParent<InventoryWindowView>(true);
         }
 
         public void OnPointerClick(PointerEventData eventData)
         {
-            if (eventData.button == PointerEventData.InputButton.Right)
+            if (eventData.button == PointerEventData.InputButton.Right && windowView != null)
             {
                 windowView.ShowContextMenu(eventData.position);
+            }
+            if (eventData.button == PointerEventData.InputButton.Left && windowView != null)
+            {
+                windowView.HideContextMenu();
             }
         }
     }
