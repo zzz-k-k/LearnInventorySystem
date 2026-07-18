@@ -8,12 +8,17 @@ namespace InventoryDemo.UI
     {
         [SerializeField] private GameObject inventoryWindow;
         [SerializeField] private RectTransform contextMenu;
+        [SerializeField] private GameObject discardConfirmationPanel;
         [SerializeField] private TMP_InputField searchInputField;
 
         private RectTransform canvasRect;
         private Canvas canvas;
+        private int? currentTargetSlotIndex;
 
         public bool IsVisible => inventoryWindow != null && inventoryWindow.activeSelf;
+        public bool IsDiscardConfirmationVisible =>
+            discardConfirmationPanel != null && discardConfirmationPanel.activeSelf;
+        public int? CurrentTargetSlotIndex => currentTargetSlotIndex;
 
         public void Configure(GameObject window, RectTransform menu)
         {
@@ -60,10 +65,11 @@ namespace InventoryDemo.UI
             if (!visible)
             {
                 HideContextMenu();
+                CloseDiscardConfirmation();
             }
         }
 
-        public void ShowContextMenu(Vector2 screenPosition)
+        public void ShowContextMenu(Vector2 screenPosition, int targetSlotIndex)
         {
             if (!IsVisible || contextMenu == null || canvasRect == null || canvas == null)
             {
@@ -97,16 +103,54 @@ namespace InventoryDemo.UI
                 canvasBounds.yMax - menuHalfSize.y);
 
             contextMenu.anchoredPosition = localPosition;
+            currentTargetSlotIndex = targetSlotIndex;
             contextMenu.gameObject.SetActive(true);
             contextMenu.SetAsLastSibling();
         }
 
         public void HideContextMenu()
         {
+            currentTargetSlotIndex = null;
+
             if (contextMenu != null)
             {
                 contextMenu.gameObject.SetActive(false);
             }
+        }
+
+        public void ShowDiscardConfirmation()
+        {
+            if (currentTargetSlotIndex == null || discardConfirmationPanel == null)
+            {
+                return;
+            }
+
+            if (contextMenu != null)
+            {
+                contextMenu.gameObject.SetActive(false);
+            }
+
+            discardConfirmationPanel.SetActive(true);
+        }
+
+        public void ConfirmDiscard()
+        {
+            CloseDiscardConfirmation();
+        }
+
+        public void CancelDiscard()
+        {
+            CloseDiscardConfirmation();
+        }
+
+        private void CloseDiscardConfirmation()
+        {
+            if (discardConfirmationPanel != null)
+            {
+                discardConfirmationPanel.SetActive(false);
+            }
+
+            currentTargetSlotIndex = null;
         }
     }
 }
