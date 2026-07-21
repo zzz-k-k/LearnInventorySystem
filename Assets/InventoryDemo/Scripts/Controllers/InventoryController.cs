@@ -8,7 +8,7 @@ namespace InventoryDemo.Controllers
     public sealed class InventoryController : MonoBehaviour
     {
         [SerializeField] private ItemDefinition[] itemDefinitions;
-        [SerializeField] private InventoryItemData[] inventoryItems;
+        [SerializeField] private List<InventoryItemData> inventoryItems;
         [SerializeField] private Transform slotContainer;
         [SerializeField] private InventoryWindowView windowView;
         [SerializeField] private PlayerHealthView playerHealthView;
@@ -18,6 +18,13 @@ namespace InventoryDemo.Controllers
 
         private void Start()
         {
+            if (!TryNormalizeItemStacks())
+            {
+                Debug.LogError("Inventory data could not be loaded because its stacks do not fit in the available slots.", this);
+                RefreshPlayerHealth();
+                return;
+            }
+
             RefreshSlots();
             RefreshPlayerHealth();
         }
@@ -46,6 +53,11 @@ namespace InventoryDemo.Controllers
             if (!TryApplyEffect(definition) || !item.ConsumeOne())
             {
                 return;
+            }
+
+            if (!item.HasItems)
+            {
+                inventoryItems.Remove(item);
             }
 
             RefreshPlayerHealth();
@@ -92,6 +104,69 @@ namespace InventoryDemo.Controllers
 
                 slot.ShowItem(definition.Icon, item.Quantity);
             }
+        }
+
+        public bool TryMoveItem(int sourceSlotIndex, int targetSlotIndex)
+        {
+            bool targetIsOutsideInventory =
+                slotContainer == null ||
+                targetSlotIndex < 0 ||
+                targetSlotIndex >= slotContainer.childCount;
+
+            if (sourceSlotIndex == targetSlotIndex || targetIsOutsideInventory)
+            {
+                RefreshSlots();
+                return false;
+            }
+
+            InventoryItemData sourceItem = FindItemAtSlot(sourceSlotIndex);
+            if (sourceItem == null)
+            {
+                RefreshSlots();
+                return false;
+            }
+
+            InventoryItemData targetItem = FindItemAtSlot(targetSlotIndex);
+            bool moved;
+
+            if (targetItem == null)
+            {
+                moved = sourceItem.TryMoveToSlot(targetSlotIndex);
+            }
+            else if (!string.Equals(sourceItem.ItemCode, targetItem.ItemCode, System.StringComparison.Ordinal))
+            {
+                moved = sourceItem.TrySwapSlotWith(targetItem);
+            }
+            else
+            {
+                Dictionary<string, ItemDefinition> definitionsByCode = BuildDefinitionLookup();
+                if (!definitionsByCode.TryGetValue(sourceItem.ItemCode, out ItemDefinition definition))
+                {
+                    Debug.LogWarning($"No item definition found for code '{sourceItem.ItemCode}'.", this);
+                    moved = false;
+                }
+                else if (definition.MaxStackSize > 1 && targetItem.Quantity < definition.MaxStackSize)
+                {
+                    moved = sourceItem.TransferTo(targetItem, definition.MaxStackSize) > 0;
+                    if (moved && !sourceItem.HasItems)
+                    {
+                        inventoryItems.Remove(sourceItem);
+                    }
+                }
+                else
+                {
+                    moved = sourceItem.TrySwapSlotWith(targetItem);
+                }
+            }
+
+            RefreshSlots();
+
+            if (moved && windowView != null)
+            {
+                windowView.HideContextMenu();
+            }
+
+            return moved;
         }
 
         private void ClearSlots()
@@ -171,6 +246,114 @@ namespace InventoryDemo.Controllers
             }
         }
 
+        private bool TryNormalizeItemStacks()
+        {
+            if (inventoryItems == null || inventoryItems.Count == 0)
+            {
+                return true;
+            }
+
+            if (slotContainer == null)
+            {
+                Debug.LogError("Inventory stacks cannot be normalized without a slot container.", this);
+                return false;
+            }
+
+            int slotCount = slotContainer.childCount;
+            var occupiedSlots = new bool[slotCount];
+            var orderedItems = new List<InventoryItemData>();
+
+            foreach (InventoryItemData item in inventoryItems)
+            {
+                if (item == null || !item.HasItems)
+                {
+                    continue;
+                }
+
+                if (item.SlotIndex < 0 || item.SlotIndex >= slotCount)
+                {
+                    Debug.LogError($"Inventory item '{item.ItemCode}' has invalid slot index {item.SlotIndex}.", this);
+                    return false;
+                }
+
+                if (occupiedSlots[item.SlotIndex])
+                {
+                    Debug.LogError($"More than one inventory item occupies slot index {item.SlotIndex}.", this);
+                    return false;
+                }
+
+                occupiedSlots[item.SlotIndex] = true;
+                orderedItems.Add(item);
+            }
+
+            orderedItems.Sort((left, right) => left.SlotIndex.CompareTo(right.SlotIndex));
+            Dictionary<string, ItemDefinition> definitionsByCode = BuildDefinitionLookup();
+            var splitPlans = new List<StackSplitPlan>();
+
+            foreach (InventoryItemData item in orderedItems)
+            {
+                if (!definitionsByCode.TryGetValue(item.ItemCode, out ItemDefinition definition))
+                {
+                    Debug.LogError($"Inventory item definition '{item.ItemCode}' could not be found.", this);
+                    return false;
+                }
+
+                int maxStackSize = definition.MaxStackSize;
+                if (item.Quantity <= maxStackSize)
+                {
+                    continue;
+                }
+
+                int remainingQuantity = item.Quantity - maxStackSize;
+                var targetSlotIndices = new List<int>();
+
+                while (remainingQuantity > 0)
+                {
+                    int targetSlotIndex = FindFirstAvailableSlot(occupiedSlots);
+                    if (targetSlotIndex < 0)
+                    {
+                        Debug.LogError($"Inventory item '{item.ItemCode}' cannot be split because the inventory is full.", this);
+                        return false;
+                    }
+
+                    occupiedSlots[targetSlotIndex] = true;
+                    targetSlotIndices.Add(targetSlotIndex);
+                    remainingQuantity -= System.Math.Min(remainingQuantity, maxStackSize);
+                }
+
+                splitPlans.Add(new StackSplitPlan(item, maxStackSize, targetSlotIndices));
+            }
+
+            foreach (StackSplitPlan splitPlan in splitPlans)
+            {
+                if (!splitPlan.SourceItem.TrySplitOverflow(
+                        splitPlan.MaxStackSize,
+                        splitPlan.TargetSlotIndices,
+                        out List<InventoryItemData> splitItems))
+                {
+                    Debug.LogError($"Inventory item '{splitPlan.SourceItem.ItemCode}' could not be split as planned.", this);
+                    return false;
+                }
+
+                inventoryItems.AddRange(splitItems);
+            }
+
+            return true;
+        }
+
+        private static int FindFirstAvailableSlot(bool[] occupiedSlots)
+        {
+            for (int slotIndex = 0; slotIndex < occupiedSlots.Length; slotIndex++)
+            {
+                if (!occupiedSlots[slotIndex])
+                {
+                    return slotIndex;
+                }
+            }
+
+            return -1;
+        }
+
         private Dictionary<string, ItemDefinition> BuildDefinitionLookup()
         {
             var definitionsByCode = new Dictionary<string, ItemDefinition>();
@@ -193,6 +376,23 @@ namespace InventoryDemo.Controllers
             }
 
             return definitionsByCode;
+        }
+
+        private sealed class StackSplitPlan
+        {
+            public StackSplitPlan(
+                InventoryItemData sourceItem,
+                int maxStackSize,
+                List<int> targetSlotIndices)
+            {
+                SourceItem = sourceItem;
+                MaxStackSize = maxStackSize;
+                TargetSlotIndices = targetSlotIndices;
+            }
+
+            public InventoryItemData SourceItem { get; }
+            public int MaxStackSize { get; }
+            public List<int> TargetSlotIndices { get; }
         }
     }
 }

@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.UI;
 using TMPro;
 
 namespace InventoryDemo.UI
@@ -10,6 +11,7 @@ namespace InventoryDemo.UI
         [SerializeField] private RectTransform contextMenu;
         [SerializeField] private GameObject discardConfirmationPanel;
         [SerializeField] private TMP_InputField searchInputField;
+        [SerializeField] private Image dragIcon;
 
         private RectTransform canvasRect;
         private Canvas canvas;
@@ -31,6 +33,7 @@ namespace InventoryDemo.UI
             canvas = GetComponent<Canvas>();
             canvasRect = transform as RectTransform;
 
+            EndItemDrag();
             SetVisible(false);
         }
 
@@ -59,6 +62,11 @@ namespace InventoryDemo.UI
             if (inventoryWindow == null)
             {
                 return;
+            }
+
+            if (!visible)
+            {
+                EndItemDrag();
             }
 
             inventoryWindow.SetActive(visible);
@@ -106,6 +114,61 @@ namespace InventoryDemo.UI
             currentTargetSlotIndex = targetSlotIndex;
             contextMenu.gameObject.SetActive(true);
             contextMenu.SetAsLastSibling();
+        }
+
+        public bool BeginItemDrag(Sprite icon, Vector2 screenPosition)
+        {
+            if (!IsVisible || IsDiscardConfirmationVisible || dragIcon == null || icon == null)
+            {
+                return false;
+            }
+
+            HideContextMenu();
+            dragIcon.sprite = icon;
+            dragIcon.raycastTarget = false;
+            dragIcon.gameObject.SetActive(true);
+            dragIcon.transform.SetAsLastSibling();
+            UpdateItemDrag(screenPosition);
+            return true;
+        }
+
+        public void UpdateItemDrag(Vector2 screenPosition)
+        {
+            if (dragIcon == null || !dragIcon.gameObject.activeSelf || canvas == null)
+            {
+                return;
+            }
+
+            RectTransform dragRect = dragIcon.rectTransform;
+            RectTransform parentRect = dragRect.parent as RectTransform;
+            if (parentRect == null)
+            {
+                return;
+            }
+
+            Camera eventCamera = canvas.renderMode == RenderMode.ScreenSpaceOverlay
+                ? null
+                : canvas.worldCamera;
+
+            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                    parentRect,
+                    screenPosition,
+                    eventCamera,
+                    out Vector2 localPosition))
+            {
+                dragRect.localPosition = localPosition;
+            }
+        }
+
+        public void EndItemDrag()
+        {
+            if (dragIcon == null)
+            {
+                return;
+            }
+
+            dragIcon.sprite = null;
+            dragIcon.gameObject.SetActive(false);
         }
 
         public void HideContextMenu()

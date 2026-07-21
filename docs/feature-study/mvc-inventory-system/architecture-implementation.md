@@ -137,7 +137,7 @@
 | 同种物品堆叠合并 | 步骤 1、3、4 | 已覆盖方向，待明确堆叠上限结果 |
 | 拆分到空格且失败时不产生部分结果 | 步骤 1、3、4 | 部分覆盖：拆分和非法取消已提出，失败结果需在流程中明确 |
 | 搜索名称、类型或标签 | 步骤 1、3 | 部分覆盖：搜索已提出，范围和显示结果未明确 |
-| 使用物品并产生具体效果 | 步骤 2、3、4 | 流程 2.1 已实现苹果恢复生命值、数量递减和归零空格，待审查与理解检查 |
+| 使用物品并产生具体效果 | 步骤 2、3、4 | 流程 2.1 已实现、审查并掌握：苹果恢复生命值、数量递减和归零后删除持有记录 |
 | 确认后丢弃全部或部分物品 | 步骤 1、3、4 | 部分覆盖：确认取消已提出，部分数量丢弃未明确 |
 | 数据库加载、保存和失败反馈 | 步骤 4 | 部分覆盖：CRUD 和重载已提出，连接、加载、保存失败反馈缺失 |
 | 区分物品定义和玩家物品实例 | 步骤 1 | 已覆盖并形成最小数据到 UI 显示链 |
@@ -156,20 +156,20 @@
 
 ## 当前实际架构
 
-当前已有最小的数据到 UI 显示链路，还没有背包操作规则、存储或数据库架构：
+当前已有数据到 UI、物品使用和拖拽内存操作链路，还没有持久化或数据库架构：
 
 - `main.unity`：保存 Canvas、`InventoryWindow`、搜索区、格子容器和 `ContextPanel` 等固定 UI；Canvas 保持激活，窗口和菜单初始隐藏。
 - `InventorySlot.prefab`：定义重复格子的 UI 外观、图标层和数量文本并挂载 `InventorySlotView`；场景中的格子是该 Prefab 的实例。
 - `InventoryWindowView`：挂在 Canvas 上，监听 B 键，只切换 `InventoryWindow`，统一定位、显示和隐藏已有的 `ContextPanel`，并保存唯一的当前菜单目标格子编号。
 - `DiscardConfirmationPanel`：场景中预先创建的固定确认界面，包含提示文字、确认按钮和取消按钮；当前只验证交互流程，不删除物品。
-- `InventorySlotView`：保存自身格子编号与是否有物品的显示状态；只有有物品时才将右键位置和格子编号交给 `InventoryWindowView`；丢弃确认框显示期间统一忽略格子左右键。
-- `ItemDefinition`：共享物品定义，当前只有稳定 `code`、显示名和 Sprite 图标。
-- `InventoryItemData`：玩家当前格子数据，保存 `itemCode`、`slotIndex` 和 `quantity`。
-- `InventoryController`：由原显示控制器改名而来，拥有当前 Demo 的物品定义、玩家物品、人物生命值和格子引用；负责数据显示，也协调当前唯一的使用效果流程。
+- `InventorySlotView`：保存自身格子编号与是否有物品的显示状态；右键有物品格时传递菜单目标；左键拖拽时接收 EventSystem 的开始、持续和结束事件，把源/目标格编号交给 Controller；不判断目标是否为空。
+- `ItemDefinition`：共享物品定义，保存稳定 `code`、显示名、Sprite 图标、使用效果和最大堆叠数。
+- `InventoryItemData`：玩家当前格子数据，保存 `itemCode`、`slotIndex` 和 `quantity`；可在约束内移动、与另一条记录交换位置或向同类记录转移数量。
+- `InventoryController`：由原显示控制器改名而来，拥有当前 Demo 的物品定义、动态玩家物品列表、人物生命值和格子引用；负责数据显示、使用效果，以及空格移动、不同物品交换、同类物品堆叠和满堆交换规则，并在物品数量归零后从列表移除持有记录。
 - `PlayerHealth`：人物生命值状态与恢复上限规则，不依赖 UI。
 - `PlayerHealthView`：把人物生命值显示到场景中的 `PlayerHealthPanel`。
 
-当前调用方向为：`B 键 -> InventoryWindowView -> 背包窗口`；`有物品格子右键 -> InventorySlotView 传递 slotIndex -> InventoryWindowView 保存唯一目标并显示菜单`；`DiscardButton -> 确认 UI`；`UseButton -> InventoryController 读取目标 -> 查找 InventoryItemData 与 ItemDefinition -> PlayerHealth.Restore -> ConsumeOne -> 刷新生命值与格子 -> 清理菜单目标`。搜索、拖拽和真实丢弃尚未连接业务行为。
+当前调用方向为：`B 键 -> InventoryWindowView -> 背包窗口`；`有物品格子右键 -> InventorySlotView 传递 slotIndex -> InventoryWindowView 保存唯一目标并显示菜单`；`DiscardButton -> 确认 UI`；`UseButton -> InventoryController 读取目标 -> 查找 InventoryItemData 与 ItemDefinition -> PlayerHealth.Restore -> ConsumeOne -> 刷新生命值与格子 -> 清理菜单目标`；`左键拖拽结束 -> InventorySlotView 传递源/目标格 -> InventoryController 查询两条记录 -> 移动/交换/堆叠 -> 刷新格子`。搜索和真实丢弃尚未连接业务行为。
 
 ## 架构演进记录
 
@@ -239,3 +239,31 @@
 - 触发证据：阶段 2 要从当前目标格子查找玩家物品和共享定义，执行人物效果、消耗数量并刷新两个视图，原控制器已经不再只负责显示。
 - 调整：`InventoryDisplayController` 保留 `.meta` GUID 并改名为 `InventoryController`；新增 `PlayerHealth` 与 `PlayerHealthView`，定义负责描述效果，Controller 负责解释和协调。
 - 当前结果：苹果定义为恢复 10 点生命值；Use 按钮执行目标查询、生命值恢复、数量消耗和 UI 刷新，数量为 0 时格子显示为空。
+
+### 变化 11：数量归零从“仅隐藏”改为删除持有记录
+
+- 触发证据：原 `ConsumeOne()` 把数量减到 0 后，`RefreshSlots()` 只是不显示该记录；画面为空但 `inventoryItems` 中仍保留 slot 0 的零数量苹果，会使后续移动、拆分和持久化无法唯一判断空格。
+- 用户方案演进：先提出让单条数据自行删除，随后修正为由拥有整个集合的 `InventoryController` 删除对应记录。
+- 规范化：单条 `InventoryItemData` 只负责扣减数量；Controller 在效果和消耗成功后检查状态，并从动态集合中移除归零记录。
+- 实际结果：`inventoryItems` 从数组改为 Unity 可序列化的 `List<InventoryItemData>`；场景初始数据保持不变，数据路径与正式编译已验证，等待 Game 视图确认。
+
+### 变化 12：拖拽视觉与真实位置修改形成首条内存行为
+
+- 用户方案：检测鼠标拖动，让物品跟随；非法落点回退；合法落点在目标创建记录并删除源记录。
+- 数据修正：移动不创建或删除持有物品，而是让同一条 `InventoryItemData` 修改 `slotIndex`，从而保留物品身份、类型和数量。
+- 职责结果：格子接收拖拽输入；窗口管理 Canvas 顶层共享拖拽图标；Controller 查询真实占用并执行空格移动规则；单条持有数据维护位置字段。
+- 当前边界：只允许移动到空格；原格、背包外和占用格回退。交换、堆叠与拖出丢弃继续作为后续独立流程。
+
+### 变化 13：已占用目标从回退扩展为交换或堆叠
+
+- 用户规则：不同物品交换两条记录的 `slotIndex`；相同物品向目标剩余容量转移数量；目标已满时也交换位置。
+- 数据补充：`ItemDefinition.maxStackSize` 同时表达是否可堆叠和数量上限，避免与单独布尔字段产生矛盾。
+- 职责结果：Controller 查询两条记录并选择规则；`InventoryItemData` 只执行受约束的位置交换或数量转移；来源数量归零仍由拥有集合的 Controller 删除。
+- 当前结果：空格移动、不同物品交换、部分堆叠、完整合并和满堆交换均已通过隔离 Unity 状态验证。
+
+### 变化 14：最大堆叠数从操作条件提升为数据进入不变量
+
+- 触发证据：移动合并会限制目标上限，但场景或未来数据库可以直接载入数量超过 `ItemDefinition.MaxStackSize` 的单条记录。
+- 用户方案演进：先提出在持有数据中统一限制 10；发现不同物品上限不同后，修正为由同时拥有定义和记录的 Controller 检查；最终决定超出部分按空格顺序拆分，容量不足整体拒绝。
+- 职责结果：Controller 在首次显示前规划所有记录的空格容量；`InventoryItemData` 根据已确认的目标格创建同类拆分记录；`RefreshSlots()` 不承担数据修复。
+- 一致性结果：所有空格足够才应用拆分；任一记录容量不足时原列表完全不变，背包不进入可操作状态。
