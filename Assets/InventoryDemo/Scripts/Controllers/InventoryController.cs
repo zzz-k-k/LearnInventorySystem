@@ -262,11 +262,13 @@ namespace InventoryDemo.Controllers
             int slotCount = slotContainer.childCount;
             var occupiedSlots = new bool[slotCount];
             var orderedItems = new List<InventoryItemData>();
+            var itemsToRemove = new List<InventoryItemData>();
 
             foreach (InventoryItemData item in inventoryItems)
             {
                 if (item == null || !item.HasItems)
                 {
+                    itemsToRemove.Add(item);
                     continue;
                 }
 
@@ -336,6 +338,11 @@ namespace InventoryDemo.Controllers
                 }
 
                 inventoryItems.AddRange(splitItems);
+            }
+
+            foreach (InventoryItemData item in itemsToRemove)
+            {
+                inventoryItems.Remove(item);
             }
 
             return true;
