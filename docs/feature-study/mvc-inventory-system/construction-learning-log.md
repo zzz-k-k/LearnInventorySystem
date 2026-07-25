@@ -927,7 +927,42 @@ AI 补充而非用户预先指定的技术细节：
 - `InventoryWindowView.cs`：新增 `CurrentSearchText` 属性、`OnSearchTextChanged()` 处理器；`Awake()` 解析 Controller（父链优先、子树兜底）并注册 `onValueChanged`，`OnDestroy()` 注销。
 - 编译验证：Unity 6000.2.14f1 Roslyn 全项目编译，0 错误 0 警告。
 - 已声明风险：若格子根节点无 `Image` 组件，高亮静默不显示（空值守卫），需行为验证确认；若如此则补一个序列化引用。
-- 当前状态：等待用户在编辑器中按清单完成行为验证。
+- Bug 3.6-1：见 `bug-repair-log.md`。忽略大小写修复已实施（`OrdinalIgnoreCase`）并编译通过；中文名+中文字体按默认推迟记录（用户未选择追加，可随时重提）。
+- 行为验证状态：编译验证通过；Play 模式行为清单尚未由用户跑完——流程关闭前必须通过，如实挂起。
+
+### 流程 3.6 代码走读记录（2026-07-25）
+
+- 讲解顺序与用户行为方案一致：打字触发 → 匹配查询 → 高亮应用 → 刷新重应用。
+- 三个文件均为修改，无新文件、零场景改动。
+- 关键运行时事实：
+  - `onValueChanged` 每次文本变化（含删除）都触发；监听在 `Awake()` 注册、`OnDestroy()` 注销，与 `splitSlider` 同款配对模式。
+  - 数据流 View→Controller→View：文本进、上色出，`inventoryItems` 全程只读，符合"搜索不改真实数据"。
+  - `RefreshSlots()` 中重应用由 Controller 通过 `CurrentSearchText` 主动向 View 拉取文本；高亮（color）与物品显示（sprite/text）互不干扰，顺序无关。
+  - `BuildDefinitionLookup()` 用于每条物品记录的 code→定义 O(1) 查询，方向与用户原设想（入口预载）不同但用途一致。
+  - `normalBackgroundColor` 在 `Awake()` 缓存场景原色，熄灭时恢复原色而非硬编码，尊重场景设置。
+  - 新增序列化字段 `highlightColor` 依赖字段初始化器对既有场景对象生效，实现零场景改动。
+- 用户以继续的方式确认走读（2026-07-25），进入完成后痛点审查。
+
+### 流程 3.6 完成后痛点审查（2026-07-25）
+
+- 证据补强：`InventorySlot.prefab` 根对象含 `Image`（淡绿底、RaycastTarget 开启），高亮机制成立，此前声明的"根节点无 Image"风险关闭；预制体中无 `highlightColor` 序列化数据，字段默认值生效，证实零场景改动。
+- 状态与数据一致性：无当前证据。搜索全程只读；物品记录 `SlotIndex` 越界时匹配集合含无效编号，但应用循环只遍历实际格子数组，天然无害。
+- 失败与恢复：无当前实现证据（属阶段 4）。
+- 测试与可观察性：编译验证通过；Play 模式行为清单仍未跑（流程关闭门槛，非痛点）。
+- 维护与合理扩展：无新证据。高亮状态由 `ApplySearch()` 单点拥有，无重复。
+- 下一阶段依赖（MySQL 持久化）：搜索只读，无阻塞。
+- 在审痛点（唯一，分类 optional-later）：模态一致性缺口——丢弃确认框或拆分面板打开时，格子的点击与拖拽均被守卫拦截，但搜索输入框仍可交互：打字会实时改变模态面板底下的高亮。无数据风险（确认前 Controller 重校验），属于"模态期间界面仍在响应输入"的行为不一致。
+- 用户应对方案（2026-07-25）：弹出确认框后禁用输入框。AI 评审补两点：同类模态还有拆分面板，规则应覆盖两者；禁用需配对恢复。
+- 修复实施：`InventoryWindowView` 新增私有方法 `RefreshSearchInteractable()`（`interactable = !IsDiscardConfirmationVisible && !IsSplitPanelVisible`，一条规则一处维护），在 `ShowDiscardConfirmation()`、`CloseDiscardConfirmation()`、`ShowSplitPanel()`、`CloseSplitPanel()` 四个开/关入口各调用一次；`SetVisible(false)` 经由两个 Close 方法自动恢复。编译 0 错误。
+- 行为清单追加两项：模态打开时输入框变灰不可交互；模态关闭后恢复可输入。
+- 痛点状态：已解决（待 Play 清单一并确认）。无其余在审痛点，进入流程 3.6 最终理解检查。
+
+### 流程 3.6 最终理解检查：通过（2026-07-25）
+
+- 已掌握：完整运行时链条（onValueChanged → OnSearchTextChanged → ApplySearch → Contains → HashSet → SetHighlight）；刷新时重跑搜索；职责边界（Controller 拥有数据故负责匹配，SlotView 负责格子外观）；显示层与数据层分离（口口=字形缺失，不高亮=数据为英文名，两者独立）。
+- 已补充（非纠错）：HashSet 收集的是 SlotIndex 而非字符；链条只读的保证在于唯一写操作是 View 层的 Image.color；刷新时文本由 Controller 经 CurrentSearchText 主动拉取（与打字时的推方向相反），高亮"跟随"实为按新数据重算。
+- 理解状态：mastered。
+- 流程 3.6 关闭门槛仅剩：Play 行为清单（8 项）通过。
 
 ### 流程 3.5 代码走读记录（2026-07-25）
 

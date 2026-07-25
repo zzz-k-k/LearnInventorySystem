@@ -248,6 +248,7 @@ namespace InventoryDemo.UI
             }
 
             discardConfirmationPanel.SetActive(true);
+            RefreshSearchInteractable();
         }
 
         public void ShowDiscardConfirmationForSlot(int targetSlotIndex)
@@ -302,6 +303,7 @@ namespace InventoryDemo.UI
             UpdateSplitAmountText(1);
             splitPanel.SetActive(true);
             splitPanel.transform.SetAsLastSibling();
+            RefreshSearchInteractable();
         }
 
         public void CloseSplitPanel()
@@ -312,6 +314,7 @@ namespace InventoryDemo.UI
             }
 
             currentTargetSlotIndex = null;
+            RefreshSearchInteractable();
         }
 
         public void CancelDiscard()
@@ -327,6 +330,7 @@ namespace InventoryDemo.UI
             }
 
             currentTargetSlotIndex = null;
+            RefreshSearchInteractable();
         }
 
         private void UpdateSplitAmountText(float value)
@@ -349,6 +353,15 @@ namespace InventoryDemo.UI
             if (controller != null)
             {
                 controller.ApplySearch(searchText);
+            }
+        }
+
+        private void RefreshSearchInteractable()
+        {
+            if (searchInputField != null)
+            {
+                searchInputField.interactable =
+                    !IsDiscardConfirmationVisible && !IsSplitPanelVisible;
             }
         }
     }

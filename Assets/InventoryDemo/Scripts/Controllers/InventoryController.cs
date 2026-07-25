@@ -124,7 +124,7 @@ namespace InventoryDemo.Controllers
 
                     if (definitionsByCode.TryGetValue(item.ItemCode, out ItemDefinition definition) &&
                         definition.DisplayName != null &&
-                        definition.DisplayName.Contains(trimmedText))
+                        definition.DisplayName.Contains(trimmedText, System.StringComparison.OrdinalIgnoreCase))
                     {
                         matchedSlotIndexes.Add(item.SlotIndex);
                     }
