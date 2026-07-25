@@ -70,7 +70,8 @@ namespace InventoryDemo.UI
 
         public void OnPointerClick(PointerEventData eventData)
         {
-            if (windowView != null && windowView.IsDiscardConfirmationVisible)
+            if (windowView != null &&
+                (windowView.IsDiscardConfirmationVisible || windowView.IsSplitPanelVisible))
             {
                 return;
             }
@@ -80,7 +81,8 @@ namespace InventoryDemo.UI
                 slotIndex >= 0 &&
                 windowView != null)
             {
-                windowView.ShowContextMenu(eventData.position, slotIndex);
+                bool canSplit = controller != null && controller.CanSplitItem(slotIndex);
+                windowView.ShowContextMenu(eventData.position, slotIndex, canSplit);
             }
             if (eventData.button == PointerEventData.InputButton.Left && windowView != null)
             {
@@ -125,7 +127,10 @@ namespace InventoryDemo.UI
             SetItemVisualVisible(true);
             windowView.EndItemDrag();
 
-            if (!windowView.IsVisible || windowView.IsDiscardConfirmationVisible || controller == null)
+            if (!windowView.IsVisible ||
+                windowView.IsDiscardConfirmationVisible ||
+                windowView.IsSplitPanelVisible ||
+                controller == null)
             {
                 controller?.RefreshSlots();
                 return;
@@ -139,6 +144,11 @@ namespace InventoryDemo.UI
             if (targetSlot == null)
             {
                 controller.RefreshSlots();
+                if (!windowView.IsScreenPointInsideInventory(eventData.position))
+                {
+                    windowView.ShowDiscardConfirmationForSlot(slotIndex);
+                }
+
                 return;
             }
 

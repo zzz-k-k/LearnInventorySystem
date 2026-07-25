@@ -169,6 +169,74 @@ namespace InventoryDemo.Controllers
             return moved;
         }
 
+        public bool CanSplitItem(int slotIndex)
+        {
+            InventoryItemData item = FindItemAtSlot(slotIndex);
+            return item != null &&
+                   item.Quantity > 1 &&
+                   FindFirstEmptySlotIndex() >= 0;
+        }
+
+        public void BeginSplitSelectedItem()
+        {
+            if (windowView == null ||
+                windowView.CurrentTargetSlotIndex is not int targetSlotIndex)
+            {
+                return;
+            }
+
+            InventoryItemData item = FindItemAtSlot(targetSlotIndex);
+            if (item == null || !CanSplitItem(targetSlotIndex))
+            {
+                return;
+            }
+
+            windowView.ShowSplitPanel(item.Quantity - 1);
+        }
+
+        public void ConfirmSplitSelectedItem()
+        {
+            if (windowView == null ||
+                windowView.CurrentTargetSlotIndex is not int sourceSlotIndex)
+            {
+                return;
+            }
+
+            InventoryItemData sourceItem = FindItemAtSlot(sourceSlotIndex);
+            int targetSlotIndex = FindFirstEmptySlotIndex();
+            int splitQuantity = windowView.SelectedSplitQuantity;
+
+            if (sourceItem == null ||
+                targetSlotIndex < 0 ||
+                !sourceItem.TrySplit(splitQuantity, targetSlotIndex, out InventoryItemData splitItem))
+            {
+                return;
+            }
+
+            inventoryItems.Add(splitItem);
+            RefreshSlots();
+            windowView.CloseSplitPanel();
+        }
+
+        public void ConfirmDiscardSelectedItem()
+        {
+            if (windowView == null ||
+                !windowView.IsDiscardConfirmationVisible ||
+                windowView.CurrentTargetSlotIndex is not int targetSlotIndex)
+            {
+                return;
+            }
+
+            InventoryItemData item = FindItemAtSlot(targetSlotIndex);
+            if (item != null)
+            {
+                inventoryItems.Remove(item);
+                RefreshSlots();
+            }
+
+            windowView.CloseDiscardConfirmation();
+        }
+
         private void ClearSlots()
         {
             foreach (InventorySlotView slot in slots)
@@ -218,6 +286,24 @@ namespace InventoryDemo.Controllers
             }
 
             return null;
+        }
+
+        private int FindFirstEmptySlotIndex()
+        {
+            if (slotContainer == null)
+            {
+                return -1;
+            }
+
+            for (int slotIndex = 0; slotIndex < slotContainer.childCount; slotIndex++)
+            {
+                if (FindItemAtSlot(slotIndex) == null)
+                {
+                    return slotIndex;
+                }
+            }
+
+            return -1;
         }
 
         private bool TryApplyEffect(ItemDefinition definition)

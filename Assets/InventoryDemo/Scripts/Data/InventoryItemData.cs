@@ -73,6 +73,30 @@ namespace InventoryDemo.Data
             return transferredQuantity;
         }
 
+        public bool TrySplit(
+            int splitQuantity,
+            int targetSlotIndex,
+            out InventoryItemData splitItem)
+        {
+            splitItem = null;
+            if (splitQuantity <= 0 ||
+                splitQuantity >= quantity ||
+                targetSlotIndex < 0 ||
+                targetSlotIndex == slotIndex)
+            {
+                return false;
+            }
+
+            splitItem = new InventoryItemData
+            {
+                itemCode = itemCode,
+                slotIndex = targetSlotIndex,
+                quantity = splitQuantity
+            };
+            quantity -= splitQuantity;
+            return true;
+        }
+
         public bool TrySplitOverflow(
             int maxStackSize,
             IReadOnlyList<int> targetSlotIndices,

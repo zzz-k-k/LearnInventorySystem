@@ -12,6 +12,10 @@ namespace InventoryDemo.UI
         [SerializeField] private GameObject discardConfirmationPanel;
         [SerializeField] private TMP_InputField searchInputField;
         [SerializeField] private Image dragIcon;
+        [SerializeField] private Button splitButton;
+        [SerializeField] private GameObject splitPanel;
+        [SerializeField] private Slider splitSlider;
+        [SerializeField] private TMP_Text splitAmountText;
 
         private RectTransform canvasRect;
         private Canvas canvas;
@@ -20,7 +24,10 @@ namespace InventoryDemo.UI
         public bool IsVisible => inventoryWindow != null && inventoryWindow.activeSelf;
         public bool IsDiscardConfirmationVisible =>
             discardConfirmationPanel != null && discardConfirmationPanel.activeSelf;
+        public bool IsSplitPanelVisible => splitPanel != null && splitPanel.activeSelf;
         public int? CurrentTargetSlotIndex => currentTargetSlotIndex;
+        public int SelectedSplitQuantity =>
+            splitSlider != null ? Mathf.RoundToInt(splitSlider.value) : 0;
 
         public void Configure(GameObject window, RectTransform menu)
         {
@@ -35,6 +42,19 @@ namespace InventoryDemo.UI
 
             EndItemDrag();
             SetVisible(false);
+
+            if (splitSlider != null)
+            {
+                splitSlider.onValueChanged.AddListener(UpdateSplitAmountText);
+            }
+        }
+
+        private void OnDestroy()
+        {
+            if (splitSlider != null)
+            {
+                splitSlider.onValueChanged.RemoveListener(UpdateSplitAmountText);
+            }
         }
 
         private void Update()
@@ -74,12 +94,21 @@ namespace InventoryDemo.UI
             {
                 HideContextMenu();
                 CloseDiscardConfirmation();
+                CloseSplitPanel();
             }
         }
 
-        public void ShowContextMenu(Vector2 screenPosition, int targetSlotIndex)
+        public void ShowContextMenu(
+            Vector2 screenPosition,
+            int targetSlotIndex,
+            bool canSplit)
         {
-            if (!IsVisible || contextMenu == null || canvasRect == null || canvas == null)
+            if (!IsVisible ||
+                IsDiscardConfirmationVisible ||
+                IsSplitPanelVisible ||
+                contextMenu == null ||
+                canvasRect == null ||
+                canvas == null)
             {
                 return;
             }
@@ -112,13 +141,22 @@ namespace InventoryDemo.UI
 
             contextMenu.anchoredPosition = localPosition;
             currentTargetSlotIndex = targetSlotIndex;
+            if (splitButton != null)
+            {
+                splitButton.interactable = canSplit;
+            }
+
             contextMenu.gameObject.SetActive(true);
             contextMenu.SetAsLastSibling();
         }
 
         public bool BeginItemDrag(Sprite icon, Vector2 screenPosition)
         {
-            if (!IsVisible || IsDiscardConfirmationVisible || dragIcon == null || icon == null)
+            if (!IsVisible ||
+                IsDiscardConfirmationVisible ||
+                IsSplitPanelVisible ||
+                dragIcon == null ||
+                icon == null)
             {
                 return false;
             }
@@ -196,9 +234,71 @@ namespace InventoryDemo.UI
             discardConfirmationPanel.SetActive(true);
         }
 
-        public void ConfirmDiscard()
+        public void ShowDiscardConfirmationForSlot(int targetSlotIndex)
         {
-            CloseDiscardConfirmation();
+            if (!IsVisible ||
+                IsSplitPanelVisible ||
+                targetSlotIndex < 0)
+            {
+                return;
+            }
+
+            currentTargetSlotIndex = targetSlotIndex;
+            ShowDiscardConfirmation();
+        }
+
+        public bool IsScreenPointInsideInventory(Vector2 screenPosition)
+        {
+            if (!IsVisible ||
+                inventoryWindow == null ||
+                inventoryWindow.transform is not RectTransform windowRect)
+            {
+                return false;
+            }
+
+            Camera eventCamera = canvas != null &&
+                                 canvas.renderMode != RenderMode.ScreenSpaceOverlay
+                ? canvas.worldCamera
+                : null;
+
+            return RectTransformUtility.RectangleContainsScreenPoint(
+                windowRect,
+                screenPosition,
+                eventCamera);
+        }
+
+        public void ShowSplitPanel(int maximumAmount)
+        {
+            if (currentTargetSlotIndex == null ||
+                maximumAmount < 1 ||
+                splitPanel == null ||
+                splitSlider == null)
+            {
+                return;
+            }
+
+            if (contextMenu != null)
+            {
+                contextMenu.gameObject.SetActive(false);
+            }
+
+            splitSlider.wholeNumbers = true;
+            splitSlider.minValue = 1;
+            splitSlider.maxValue = maximumAmount;
+            splitSlider.SetValueWithoutNotify(1);
+            UpdateSplitAmountText(1);
+            splitPanel.SetActive(true);
+            splitPanel.transform.SetAsLastSibling();
+        }
+
+        public void CloseSplitPanel()
+        {
+            if (splitPanel != null)
+            {
+                splitPanel.SetActive(false);
+            }
+
+            currentTargetSlotIndex = null;
         }
 
         public void CancelDiscard()
@@ -206,7 +306,7 @@ namespace InventoryDemo.UI
             CloseDiscardConfirmation();
         }
 
-        private void CloseDiscardConfirmation()
+        public void CloseDiscardConfirmation()
         {
             if (discardConfirmationPanel != null)
             {
@@ -214,6 +314,14 @@ namespace InventoryDemo.UI
             }
 
             currentTargetSlotIndex = null;
+        }
+
+        private void UpdateSplitAmountText(float value)
+        {
+            if (splitAmountText != null)
+            {
+                splitAmountText.text = Mathf.RoundToInt(value).ToString();
+            }
         }
     }
 }
