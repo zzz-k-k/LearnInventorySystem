@@ -69,6 +69,7 @@ namespace InventoryDemo.Controllers
         {
             slots = FindSlotsInHierarchyOrder();
             ClearSlots();
+            ApplySearch(windowView != null ? windowView.CurrentSearchText : string.Empty);
             Dictionary<string, ItemDefinition> definitionsByCode = BuildDefinitionLookup();
 
             if (inventoryItems == null)
@@ -103,6 +104,39 @@ namespace InventoryDemo.Controllers
                 }
 
                 slot.ShowItem(definition.Icon, item.Quantity);
+            }
+        }
+
+        public void ApplySearch(string searchText)
+        {
+            string trimmedText = searchText == null ? string.Empty : searchText.Trim();
+            var matchedSlotIndexes = new HashSet<int>();
+
+            if (trimmedText.Length > 0 && inventoryItems != null)
+            {
+                Dictionary<string, ItemDefinition> definitionsByCode = BuildDefinitionLookup();
+                foreach (InventoryItemData item in inventoryItems)
+                {
+                    if (item == null || !item.HasItems)
+                    {
+                        continue;
+                    }
+
+                    if (definitionsByCode.TryGetValue(item.ItemCode, out ItemDefinition definition) &&
+                        definition.DisplayName != null &&
+                        definition.DisplayName.Contains(trimmedText))
+                    {
+                        matchedSlotIndexes.Add(item.SlotIndex);
+                    }
+                }
+            }
+
+            for (int slotIndex = 0; slotIndex < slots.Length; slotIndex++)
+            {
+                if (slots[slotIndex] != null)
+                {
+                    slots[slotIndex].SetHighlight(matchedSlotIndexes.Contains(slotIndex));
+                }
             }
         }
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "功能学习工作流"
+  short_description: "Build one observable feature flow at a time while learning"
+  default_prompt: "Use $feature-study-workflow to review my feature roadmap and build one observable flow at a time."

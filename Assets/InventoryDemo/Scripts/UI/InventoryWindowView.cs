@@ -1,3 +1,4 @@
+using InventoryDemo.Controllers;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
@@ -19,6 +20,7 @@ namespace InventoryDemo.UI
 
         private RectTransform canvasRect;
         private Canvas canvas;
+        private InventoryController controller;
         private int? currentTargetSlotIndex;
 
         public bool IsVisible => inventoryWindow != null && inventoryWindow.activeSelf;
@@ -28,6 +30,8 @@ namespace InventoryDemo.UI
         public int? CurrentTargetSlotIndex => currentTargetSlotIndex;
         public int SelectedSplitQuantity =>
             splitSlider != null ? Mathf.RoundToInt(splitSlider.value) : 0;
+        public string CurrentSearchText =>
+            searchInputField != null ? searchInputField.text : string.Empty;
 
         public void Configure(GameObject window, RectTransform menu)
         {
@@ -47,6 +51,17 @@ namespace InventoryDemo.UI
             {
                 splitSlider.onValueChanged.AddListener(UpdateSplitAmountText);
             }
+
+            controller = GetComponentInParent<InventoryController>(true);
+            if (controller == null)
+            {
+                controller = GetComponentInChildren<InventoryController>(true);
+            }
+
+            if (searchInputField != null)
+            {
+                searchInputField.onValueChanged.AddListener(OnSearchTextChanged);
+            }
         }
 
         private void OnDestroy()
@@ -54,6 +69,11 @@ namespace InventoryDemo.UI
             if (splitSlider != null)
             {
                 splitSlider.onValueChanged.RemoveListener(UpdateSplitAmountText);
+            }
+
+            if (searchInputField != null)
+            {
+                searchInputField.onValueChanged.RemoveListener(OnSearchTextChanged);
             }
         }
 
@@ -113,9 +133,7 @@ namespace InventoryDemo.UI
                 return;
             }
 
-            Camera eventCamera = canvas.renderMode == RenderMode.ScreenSpaceOverlay
-                ? null
-                : canvas.worldCamera;
+            Camera eventCamera = GetEventCamera();
 
             RectTransform menuParent = contextMenu.parent as RectTransform;
             if (menuParent == null ||
@@ -184,9 +202,7 @@ namespace InventoryDemo.UI
                 return;
             }
 
-            Camera eventCamera = canvas.renderMode == RenderMode.ScreenSpaceOverlay
-                ? null
-                : canvas.worldCamera;
+            Camera eventCamera = GetEventCamera();
 
             if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
                     parentRect,
@@ -256,10 +272,7 @@ namespace InventoryDemo.UI
                 return false;
             }
 
-            Camera eventCamera = canvas != null &&
-                                 canvas.renderMode != RenderMode.ScreenSpaceOverlay
-                ? canvas.worldCamera
-                : null;
+            Camera eventCamera = GetEventCamera();
 
             return RectTransformUtility.RectangleContainsScreenPoint(
                 windowRect,
@@ -321,6 +334,21 @@ namespace InventoryDemo.UI
             if (splitAmountText != null)
             {
                 splitAmountText.text = Mathf.RoundToInt(value).ToString();
+            }
+        }
+
+        private Camera GetEventCamera()
+        {
+            return canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay
+                ? canvas.worldCamera
+                : null;
+        }
+
+        private void OnSearchTextChanged(string searchText)
+        {
+            if (controller != null)
+            {
+                controller.ApplySearch(searchText);
             }
         }
     }

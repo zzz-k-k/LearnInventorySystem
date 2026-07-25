@@ -853,7 +853,93 @@ AI 补充而非用户预先指定的技术细节：
 ### 当前停点
 
 - 实现与验证完成。
-- 等待代码讲解与用户即时理解确认，尚未开始完成后痛点审查。
+- 代码走读已交付并由用户确认理解（2026-07-25），完成后痛点审查已开始。
+
+### 流程 3.5 完成后痛点审查（2026-07-25）
+
+- 审查范围：状态与数据一致性、失败与恢复、测试与可观察性、维护与合理扩展，以及下一步依赖（阶段 3 剩余的搜索、阶段 4 持久化）。
+- 状态与数据一致性：无当前证据。拖出入口维持唯一目标格所有权；确认前 Controller 重新校验；`B` 键在确认框打开或拖拽中关闭窗口时，`SetVisible(false)` 会统一结束拖拽视觉、关闭确认框并清空目标，等价于取消，数据安全。
+- 失败与恢复：无当前实现证据（属阶段 4）。
+- 测试与可观察性：窗口内格子、窗口内非格子、窗口外三类落点均有隔离验证证据。
+- 维护与合理扩展：发现一个痛点（见下），分类 `optional-later`。
+- 在审痛点（唯一）：事件相机选择逻辑在 `InventoryWindowView.cs` 中重复三次（`ShowContextMenu()` 116-118、`UpdateItemDrag()` 187-189、`IsScreenPointInsideInventory()` 259-262），且第三处写法与前两处不同（条件取反、自带 canvas 空检查）。当前 `ScreenSpaceOverlay` 模式下三处结果一致，问题被掩盖；一旦渲染模式改变或某一处单独修改，拖拽跟随、菜单定位与窗口外判定所用相机可能不一致。
+- 用户应对方案（2026-07-25）：把三处重复逻辑提取成一个新方法，三个函数改为调用它。
+- AI 评审：方向正确（Extract Method）。最小修复确认为：在 `InventoryWindowView` 内新增私有无参方法（返回 `Camera`），内部统一写法并自带 `canvas` 空检查；三处调用点替换为该方法调用。行为保持不变——前两处调用点的早退守卫已保证 `canvas` 非空，帮助方法内的空检查只是让第三处的防御性写法成为统一标准。
+- 插曲：首次记录时 D 盘写满导致文档写入失败；用户清理磁盘后恢复（2026-07-25，恢复后可用 8.78 GB）。
+- 用户已批准实施（2026-07-25）。
+- 实施结果：`InventoryWindowView` 类底部新增私有方法 `GetEventCamera()`；三处调用点（`ShowContextMenu()`、`UpdateItemDrag()`、`IsScreenPointInsideInventory()`）统一替换为 `Camera eventCamera = GetEventCamera();`，净减 6 行。
+- 验证：用户编辑器占用项目导致批处理编译不可用，改用 Unity 6000.2.14f1 自带 Roslyn（`DotNetSdkRoslyn\csc.dll`）对全部 9 个项目脚本整体编译：0 错误；仅有的 CS0649 警告是 `[SerializeField]` 字段在 Unity 管线外编译的正常现象。
+- 痛点状态：已解决。审查中无其余在审痛点，进入流程 3.5 最终理解检查。
+
+### 流程 3.5 最终理解检查：第一次回答（2026-07-25）
+
+- 已掌握：判定边界（未命中格子不等于丢弃，窗口内空白处松手只还原）；职责边界（WindowView 拥有窗口几何知识、SlotView 拥有拖拽时机、Controller 拥有并修改数据）。
+- 基本正确待补充：运行时链条方向正确，但需明确数据只在用户点击确认、`ConfirmDiscardSelectedItem()` 执行时才被修改；确认框显示阶段数据未变。"跳回原位"实际是数据从未移动，`RefreshSlots()` 按数据重绘。
+- 需要修正：切换 `ScreenSpaceCamera` 模式时重构后的代码零改动——`GetEventCamera()` 的非 Overlay 分支已返回 `canvas.worldCamera`，只需在场景里给 Canvas 指定相机；重构收益是未来规则变化只改一处。
+- 用户提问：Overlay 模式为何传 `null`。已解释：Overlay 画布不经过任何相机投影，其坐标数值本身就是屏幕像素；`null` 的含义是"不投影、直接比较"，传相机反而会按错误的投影矩阵换算出错误结果。
+- 当前状态：等待用户确认修正点后关闭流程 3.5。
+
+### 流程 3.5 最终理解检查：通过（2026-07-25）
+
+- 用户以继续下一流程的方式确认修正点：数据只在确认按钮触发 `Remove` 时修改；切换渲染模式代码零改动，未来相机规则只改 `GetEventCamera()` 一处。
+- 判定边界与职责边界第一次回答即正确。
+- 最终状态：实现完成、验证完成、痛点审查完成、理解 `mastered`，流程 3.5 完整关闭。高层阶段 3 剩余：搜索。
+
+## 构建流程 3.6：按输入搜索并高亮匹配格子
+
+### 用户行为方案（2026-07-25 原始表述）
+
+1. 在输入框旁点击搜索按钮，`onClick` 调用一个查找函数。
+2. 查找函数调用 `BuildDefinitionLookup()` 先把数据放进内存。
+3. 根据输入内容查找，找到 code 对应的 slotIndex。
+4. 让该格子高亮。
+
+### AI 评审
+
+- 正确：整体链条方向（输入 → 定义 → code → slotIndex → 高亮）成立；选择"高亮"是需求允许的两种反馈方式之一；全程不改真实数据符合验收标准。
+- 修正一（字典方向）：`BuildDefinitionLookup()` 的字典是 code → definition，玩家输入的是显示名称，第一步实为反向匹配——由输入匹配 `displayName` 得到 code 集合，再用 code 集合在 `inventoryItems` 中收集 `SlotIndex`。"先放进内存"需精化：定义本就在内存（序列化数组），该方法只是构建 O(1) 查找索引。
+- 修正二（多结果）：同种物品可占多个格子，应高亮全部匹配格子；无匹配或清空输入时应取消全部高亮。
+- 设计点（触发方式）：需求为"立即更新显示结果"；场景当前只有 `searchInputField`，没有搜索按钮。按钮需新增场景对象与绑定；`onValueChanged` 则打字即搜。两者均可满足需求，由用户在修订中选定。
+- 设计点（高亮生命周期）：`RefreshSlots()` 会重建格子显示，高亮属于 View 状态，其保存位置与刷新后的保持/清除策略需在实施方案中明确。
+- 聚焦问题（唯一）：匹配范围——需求原文"名称、类型或标签"，当前数据仅有 `displayName` 与 `effectType`，无标签字段。建议本条流程只做名称部分匹配，类型/标签待字段真实出现后再做（同拆分实例数据先例）。
+
+### 用户决定（2026-07-25）
+
+- 触发方式：打字即搜（`onValueChanged`）。
+- 高亮状态：存在对应格子里；AI 规范化：存在 `InventorySlotView`（View 状态），不进入 `InventoryItemData`（Model），否则违反"搜索不改真实数据"。
+- 生命周期（2026-07-25 修订）：刷新后不清除——`RefreshSlots()` 末尾按当前输入重新应用高亮，高亮跟随数据变化（物品移动后在新格子继续高亮），与输入框状态始终一致。原选"刷新后清除"，用户在得知后果（文本仍在而高亮消失）后修订。
+- 匹配范围：仅名称部分匹配；类型/标签推迟到字段真实出现。
+
+### 最小实施方案（待批准）
+
+- 可观察结果：输入文本时，名称包含该文本的所有物品格子立即高亮；清空输入、无匹配或数据刷新后高亮消失；数据与格子位置不变。
+- `InventoryController.cs`：新增 `ApplySearch(string text)`——空白输入清除全部高亮；否则遍历 `inventoryItems`，经 `BuildDefinitionLookup()` 以 code 查定义、用 `displayName` 部分匹配输入，命中 `SlotIndex` 集合后逐格子开关高亮。`RefreshSlots()` 在重建显示后按 `windowView.CurrentSearchText` 重新应用搜索，实现"刷新后不清除"。
+- `InventorySlotView.cs`：新增 `SetHighlight(bool)`，用格子根节点自身的 `Image`（`GetComponent`，零场景改动）做底色切换；高亮颜色为带默认值的序列化字段。
+- `InventoryWindowView.cs`：仿照 `splitSlider` 监听模式，`Awake()` 注册 `searchInputField.onValueChanged` → 转发 Controller（`GetComponentInParent`，失败时 `GetComponentInChildren` 兜底），`OnDestroy()` 注销；新增 `CurrentSearchText` 只读属性供刷新后重应用。
+- 场景：零改动。
+- 保守默认（记录假设，不阻塞）：输入做 `Trim`；匹配用简单 `Contains`（中文名下大小写无关紧要）。
+- 当前状态：用户已批准实施（2026-07-25），生命周期按修订版执行。
+
+### 实现与验证（2026-07-25）
+
+- `InventoryController.cs`：新增 `ApplySearch()`；`RefreshSlots()` 在 `ClearSlots()` 后立即按 `windowView.CurrentSearchText` 重应用搜索（高亮只改底色，与后续 `ShowItem()` 的图标/数量互不影响，顺序无关）。
+- `InventorySlotView.cs`：新增序列化字段 `highlightColor`（带默认值，零场景改动）、`SetHighlight()`；`Awake()` 缓存根节点 `Image` 与原始底色。
+- `InventoryWindowView.cs`：新增 `CurrentSearchText` 属性、`OnSearchTextChanged()` 处理器；`Awake()` 解析 Controller（父链优先、子树兜底）并注册 `onValueChanged`，`OnDestroy()` 注销。
+- 编译验证：Unity 6000.2.14f1 Roslyn 全项目编译，0 错误 0 警告。
+- 已声明风险：若格子根节点无 `Image` 组件，高亮静默不显示（空值守卫），需行为验证确认；若如此则补一个序列化引用。
+- 当前状态：等待用户在编辑器中按清单完成行为验证。
+
+### 流程 3.5 代码走读记录（2026-07-25）
+
+- 讲解顺序与用户行为方案一致：检测外部 → 显示确认框 → 复用确认/取消。
+- 修改文件：`InventorySlotView.cs`（`OnEndDrag()` 三分支）、`InventoryWindowView.cs`（新增 `IsScreenPointInsideInventory()` 与 `ShowDiscardConfirmationForSlot()`）；Controller、`ConfirmDiscardSelectedItem()`、`CancelDiscard()` 与场景按钮绑定零改动。
+- 关键运行时事实：
+  - `eventData.pointerCurrentRaycast.gameObject` 是松手瞬间 GraphicRaycaster 命中的最上层 UI；`BeginItemDrag()` 中 `dragIcon.raycastTarget = false` 保证拖拽图标自身不遮挡该射线。
+  - `OnEndDrag()` 先恢复视觉并 `RefreshSlots()`，再区分“窗口内非格子落点（仅还原）”与“窗口外（打开确认框）”；确认框显示时数据未发生任何修改。
+  - `RectangleContainsScreenPoint()` 将窗口 `RectTransform` 角点换算到屏幕空间做包含测试；`ScreenSpaceOverlay` 模式传 `null` 相机，其余模式必须传 `canvas.worldCamera`，否则坐标换算错位。
+  - 拖拽丢弃入口与右键丢弃的差异仅在“如何设置 `currentTargetSlotIndex`”：右键在菜单打开时设置，拖拽由 `ShowDiscardConfirmationForSlot()` 补设，之后共用同一条流程 3.4 的确认/取消链路。
+- 已解答的即时问题方向：屏幕坐标定义、`RectTransformUtility` 的相机参数、`OnEndDrag()` 分支顺序。
+- 待用户确认理解后进入单痛点审查。
 
 ### 代码讲解与完成后痛点审查
 

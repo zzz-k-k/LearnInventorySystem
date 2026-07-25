@@ -1,0 +1,4 @@
+interface:
+  display_name: "代码库学习工作流"
+  short_description: "Map and study existing codebases by verified runtime flow"
+  default_prompt: "Use $codebase-study-workflow to map this repository, derive a verified learning route, and teach one functional module at a time."

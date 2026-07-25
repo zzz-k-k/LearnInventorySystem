@@ -14,9 +14,12 @@ namespace InventoryDemo.UI
     {
         [SerializeField] private Image itemIcon;
         [SerializeField] private TMP_Text quantityText;
+        [SerializeField] private Color highlightColor = new Color(1f, 0.85f, 0.35f, 1f);
 
         private InventoryWindowView windowView;
         private InventoryController controller;
+        private Image backgroundImage;
+        private Color normalBackgroundColor;
         private bool hasItem;
         private bool isDragging;
         private int slotIndex = -1;
@@ -27,6 +30,12 @@ namespace InventoryDemo.UI
         {
             windowView = GetComponentInParent<InventoryWindowView>(true);
             controller = GetComponentInParent<InventoryController>(true);
+
+            backgroundImage = GetComponent<Image>();
+            if (backgroundImage != null)
+            {
+                normalBackgroundColor = backgroundImage.color;
+            }
         }
 
         public void SetSlotIndex(int index)
@@ -65,6 +74,14 @@ namespace InventoryDemo.UI
             {
                 quantityText.enabled = true;
                 quantityText.text = string.Empty;
+            }
+        }
+
+        public void SetHighlight(bool highlighted)
+        {
+            if (backgroundImage != null)
+            {
+                backgroundImage.color = highlighted ? highlightColor : normalBackgroundColor;
             }
         }
 
