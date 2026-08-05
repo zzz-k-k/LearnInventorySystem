@@ -16,6 +16,27 @@ namespace InventoryDemo.Data
         public int Quantity => quantity;
         public bool HasItems => quantity > 0;
 
+        public static bool TryCreate(
+            string itemCode,
+            int slotIndex,
+            int quantity,
+            out InventoryItemData item)
+        {
+            item = null;
+            if (string.IsNullOrWhiteSpace(itemCode) || slotIndex < 0 || quantity <= 0)
+            {
+                return false;
+            }
+
+            item = new InventoryItemData
+            {
+                itemCode = itemCode,
+                slotIndex = slotIndex,
+                quantity = quantity
+            };
+            return true;
+        }
+
         public bool ConsumeOne()
         {
             if (!HasItems)

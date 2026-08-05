@@ -17,6 +17,8 @@ namespace InventoryDemo.UI
         [SerializeField] private GameObject splitPanel;
         [SerializeField] private Slider splitSlider;
         [SerializeField] private TMP_Text splitAmountText;
+        [SerializeField] private GameObject loadFailurePanel;
+        [SerializeField] private TMP_Text loadFailureText;
 
         private RectTransform canvasRect;
         private Canvas canvas;
@@ -27,6 +29,8 @@ namespace InventoryDemo.UI
         public bool IsDiscardConfirmationVisible =>
             discardConfirmationPanel != null && discardConfirmationPanel.activeSelf;
         public bool IsSplitPanelVisible => splitPanel != null && splitPanel.activeSelf;
+        public bool IsLoadFailureVisible =>
+            loadFailurePanel != null && loadFailurePanel.activeSelf;
         public int? CurrentTargetSlotIndex => currentTargetSlotIndex;
         public int SelectedSplitQuantity =>
             splitSlider != null ? Mathf.RoundToInt(splitSlider.value) : 0;
@@ -46,6 +50,7 @@ namespace InventoryDemo.UI
 
             EndItemDrag();
             SetVisible(false);
+            CloseLoadFailure();
 
             if (splitSlider != null)
             {
@@ -89,12 +94,26 @@ namespace InventoryDemo.UI
                 return;
             }
 
+            if (IsLoadFailureVisible)
+            {
+                return;
+            }
+
             ToggleInventory();
         }
 
         public void ToggleInventory()
         {
-            SetVisible(!IsVisible);
+            if (IsVisible)
+            {
+                SetVisible(false);
+                return;
+            }
+
+            if (controller != null && !IsLoadFailureVisible)
+            {
+                controller.RequestOpenInventory();
+            }
         }
 
         public void SetVisible(bool visible)
@@ -333,6 +352,33 @@ namespace InventoryDemo.UI
             RefreshSearchInteractable();
         }
 
+        public void ShowLoadFailure(string message)
+        {
+            if (loadFailurePanel == null)
+            {
+                return;
+            }
+
+            if (loadFailureText != null)
+            {
+                loadFailureText.text = message;
+            }
+
+            loadFailurePanel.SetActive(true);
+            loadFailurePanel.transform.SetAsLastSibling();
+            RefreshSearchInteractable();
+        }
+
+        public void CloseLoadFailure()
+        {
+            if (loadFailurePanel != null)
+            {
+                loadFailurePanel.SetActive(false);
+            }
+
+            RefreshSearchInteractable();
+        }
+
         private void UpdateSplitAmountText(float value)
         {
             if (splitAmountText != null)
@@ -361,7 +407,9 @@ namespace InventoryDemo.UI
             if (searchInputField != null)
             {
                 searchInputField.interactable =
-                    !IsDiscardConfirmationVisible && !IsSplitPanelVisible;
+                    !IsDiscardConfirmationVisible &&
+                    !IsSplitPanelVisible &&
+                    !IsLoadFailureVisible;
             }
         }
     }

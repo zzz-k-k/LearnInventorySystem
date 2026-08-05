@@ -1,5 +1,8 @@
+using System;
 using System.Collections.Generic;
+using System.Threading;
 using InventoryDemo.Data;
+using InventoryDemo.Persistence;
 using InventoryDemo.UI;
 using UnityEngine;
 
@@ -13,20 +16,94 @@ namespace InventoryDemo.Controllers
         [SerializeField] private InventoryWindowView windowView;
         [SerializeField] private PlayerHealthView playerHealthView;
         [SerializeField] private PlayerHealth playerHealth = new PlayerHealth();
+        [SerializeField] private int demoPlayerId = 1;
 
         private InventorySlotView[] slots = System.Array.Empty<InventorySlotView>();
+        private CancellationTokenSource loadCancellation;
+        private bool isLoading;
 
         private void Start()
         {
+            inventoryItems = new List<InventoryItemData>();
+            RefreshSlots();
+            RefreshPlayerHealth();
+        }
+
+        private void OnDestroy()
+        {
+            loadCancellation?.Cancel();
+        }
+
+        public async void RequestOpenInventory()
+        {
+            if (isLoading ||
+                windowView == null ||
+                windowView.IsVisible ||
+                windowView.IsLoadFailureVisible)
+            {
+                return;
+            }
+
+            if (!MySqlInventoryRepository.TryCreateFromEnvironment(
+                    out MySqlInventoryRepository repository,
+                    out string configurationError))
+            {
+                HandleLoadFailure(configurationError);
+                return;
+            }
+
+            isLoading = true;
+            var requestCancellation = new CancellationTokenSource();
+            loadCancellation = requestCancellation;
+            InventoryLoadResult result = null;
+            bool wasCancelled = false;
+
+            try
+            {
+                result = await repository.LoadInventoryAsync(
+                    demoPlayerId,
+                    requestCancellation.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                wasCancelled = true;
+            }
+            catch (Exception exception)
+            {
+                result = InventoryLoadResult.Failure(exception.Message);
+            }
+            finally
+            {
+                wasCancelled |= requestCancellation.IsCancellationRequested;
+                if (ReferenceEquals(loadCancellation, requestCancellation))
+                {
+                    loadCancellation = null;
+                }
+
+                requestCancellation.Dispose();
+                isLoading = false;
+            }
+
+            if (wasCancelled || this == null)
+            {
+                return;
+            }
+
+            if (result == null || !result.IsSuccess)
+            {
+                HandleLoadFailure(result?.ErrorMessage ?? "The inventory load returned no result.");
+                return;
+            }
+
+            inventoryItems = new List<InventoryItemData>(result.Items);
             if (!TryNormalizeItemStacks())
             {
-                Debug.LogError("Inventory data could not be loaded because its stacks do not fit in the available slots.", this);
-                RefreshPlayerHealth();
+                HandleLoadFailure("The database inventory snapshot failed validation.");
                 return;
             }
 
             RefreshSlots();
-            RefreshPlayerHealth();
+            windowView.SetVisible(true);
         }
 
         public void UseSelectedItem()
@@ -364,6 +441,20 @@ namespace InventoryDemo.Controllers
             {
                 playerHealthView.ShowHealth(playerHealth);
             }
+        }
+
+        private void HandleLoadFailure(string diagnosticMessage)
+        {
+            inventoryItems = new List<InventoryItemData>();
+            RefreshSlots();
+
+            if (windowView != null)
+            {
+                windowView.SetVisible(false);
+                windowView.ShowLoadFailure("Failed to load inventory. Please try again later.");
+            }
+
+            Debug.LogError($"Inventory load failed: {diagnosticMessage}", this);
         }
 
         private bool TryNormalizeItemStacks()
